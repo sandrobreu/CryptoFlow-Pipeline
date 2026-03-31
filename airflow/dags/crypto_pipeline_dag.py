@@ -1,10 +1,8 @@
 from datetime import datetime, timedelta
 import sys
-import os
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-
 
 INGESTION_PATH = "/opt/airflow/ingestion"
 
@@ -12,6 +10,7 @@ if INGESTION_PATH not in sys.path:
     sys.path.append(INGESTION_PATH)
 
 from extract_and_load import load_raw_data
+from quality_checks import run_quality_checks
 
 
 default_args = {
@@ -25,16 +24,21 @@ default_args = {
 with DAG(
     dag_id="crypto_api_pipeline",
     default_args=default_args,
-    description="Load crypto prices from CoinGecko into Postgres",
+    description="Crypto pipeline with quality checks",
     start_date=datetime(2026, 3, 31),
     schedule="@hourly",
     catchup=False,
-    tags=["crypto", "api", "postgres"],
+    tags=["crypto"],
 ) as dag:
 
-    extract_and_load_task = PythonOperator(
-        task_id="extract_and_load_crypto_data",
+    extract_task = PythonOperator(
+        task_id="extract_and_load",
         python_callable=load_raw_data,
     )
 
-    extract_and_load_task
+    quality_task = PythonOperator(
+        task_id="data_quality_checks",
+        python_callable=run_quality_checks,
+    )
+
+    extract_task >> quality_task

@@ -1,0 +1,87 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: crypto_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql:/docker-entrypoint-initdb.d
+
+  mlflow:
+    image: python:3.11-slim
+    container_name: crypto_mlflow
+    working_dir: /app
+    command: >
+      sh -c "pip install mlflow psycopg2-binary &&
+      mlflow server --host 0.0.0.0 --port 5000"
+    ports:
+      - "5000:5000"
+
+  airflow-init:
+    image: apache/airflow:2.9.3
+    container_name: airflow_init
+    depends_on:
+      - postgres
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    user: "${AIRFLOW_UID}:0"
+    command: >
+      bash -c "airflow db migrate &&
+      airflow users create
+      --username cult8r3u
+      --firstname Sandro
+      --lastname Breu
+      --role Admin
+      --email dc-sb@hotmail.com
+      --password admin"
+
+  airflow-webserver:
+    image: apache/airflow:2.9.3
+    container_name: airflow_webserver
+    depends_on:
+      - postgres
+      - airflow-init
+    restart: always
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./ingestion:/opt/airflow/ingestion
+      - ./ml:/opt/airflow/ml
+    ports:
+      - "8080:8080"
+    command: webserver
+
+  airflow-scheduler:
+    image: apache/airflow:2.9.3
+    container_name: airflow_scheduler
+    depends_on:
+      - postgres
+      - airflow-init
+    restart: always
+    env_file:
+      - .env
+    environment:
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./ingestion:/opt/airflow/ingestion
+      - ./ml:/opt/airflow/ml
+    command: scheduler
+
+volumes:
+  postgres_data:

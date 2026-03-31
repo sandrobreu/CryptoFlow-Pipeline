@@ -26,7 +26,8 @@ with DAG(
     default_args=default_args,
     description="Crypto pipeline with quality checks",
     start_date=datetime(2026, 3, 31),
-    schedule="@hourly",
+    #schedule="@hourly",
+    schedule="*/5 * * * *",  # Läuft alle 5 Minuten
     catchup=False,
     tags=["crypto"],
 ) as dag:
